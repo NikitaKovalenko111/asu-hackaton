@@ -27,17 +27,8 @@ class Pump:
 
     def stop_pump(self):
         self.state = "off"
-
-    def trigger_anomaly(self):
-        """Enable anomaly mode for this pump."""
-        self.anomaly_active = True
-
-    def clear_anomaly(self):
-        """Disable anomaly mode for this pump."""
-        self.anomaly_active = False
-
     
-    def calculate_rpm_temperature_correlation(base_vibration, current_temperature, avg_temperature, correlation_coef, current_rpm, work_coef):
+    def calculate_rpm_temperature_correlation(self, base_vibration, current_temperature, avg_temperature, correlation_coef, current_rpm, work_coef):
         return (base_vibration + (correlation_coef * (current_temperature - avg_temperature))) * (current_rpm / STANDART_RPM) * (1 + work_coef)
 
     def iteration(self, petrol_pressure_input, petrol_pressure_output, front_bearing_pump_temperature, rear_bearing_pump_temperature):
@@ -45,7 +36,13 @@ class Pump:
         self.petrol_pressure_output = petrol_pressure_output
         self.front_bearing_pump_temperature = front_bearing_pump_temperature
         self.rear_bearing_pump_temperature = rear_bearing_pump_temperature
-        self.work_coef += 0.01
+        self.rear_bearing_vertical_vibration = self.calculate_rpm_temperature_correlation(0.56, self.rear_bearing_pump_temperature, REAR_BEARING_AVG_TEMPERATURE, REAR_BEARING_VERTICAL_VIBRATION_COEFFICIENT, self.rpm, self.work_coef)
+        self.rear_bearing_horizontal_vibration = self.calculate_rpm_temperature_correlation(0.44, self.rear_bearing_pump_temperature, REAR_BEARING_AVG_TEMPERATURE, 0, self.rpm, self.work_coef)
+        self.rear_bearing_axial_vibration = self.calculate_rpm_temperature_correlation(0.6, self.rear_bearing_pump_temperature, REAR_BEARING_AVG_TEMPERATURE, 0, self.rpm, self.work_coef)
+        self.front_bearing_vertical_vibration = self.calculate_rpm_temperature_correlation(0.56, self.front_bearing_pump_temperature, REAR_BEARING_AVG_TEMPERATURE, FRONT_BEARING_VERTICAL_VIBRATION_COEFFICIENT, self.rpm, self.work_coef)
+        self.front_bearing_horizontal_vibration = self.calculate_rpm_temperature_correlation(0.44, self.front_bearing_pump_temperature, REAR_BEARING_AVG_TEMPERATURE, 0, self.rpm, self.work_coef)
+        self.work_coef += 0.00001
+
 
         #self.frame_temperature = frame_temperature
         #self.front_bearing_engine_temperature = front_bearing_engine_temperature

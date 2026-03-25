@@ -5,29 +5,26 @@ from classes.pump import Pump
 
 
 def generate_sensor_values(pump: Pump) -> dict:
-    """Generate normal or anomalous sensor values based on pump anomaly_active flag."""
-    if pump.anomaly_active:
-        # Anomaly: values outside normal range
-        return {
-            "petrol_pressure_input": random.uniform(0.8, 1.2),
-            "petrol_pressure_output": random.uniform(1.5, 2.0),
-            "front_bearing_pump_temperature": random.uniform(70.0, 95.0),
-            "rear_bearing_pump_temperature": random.uniform(70.0, 95.0),
-        }
-    else:
-        # Normal range
-        return {
-            "petrol_pressure_input": random.uniform(0.264, 0.410),
-            "petrol_pressure_output": random.uniform(0.423, 0.694),
-            "front_bearing_pump_temperature": random.uniform(49.0, 50.0),
-            "rear_bearing_pump_temperature": random.uniform(49.0, 50.0),
-        }
+    petrol_pressure_input = random.uniform(0.264, 0.410)
+    petrol_pressure_output = random.uniform(0.423, 0.694)
+    front_bearing_pump_temperature = random.uniform(49.0, 50.0+(50*pump.work_coef))
+    rear_bearing_pump_temperature = random.uniform(49.0, 50.0+(50*pump.work_coef))
+
+    return {
+        "petrol_pressure_input": petrol_pressure_input,
+        "petrol_pressure_output": petrol_pressure_output,
+        "front_bearing_pump_temperature": front_bearing_pump_temperature,
+        "rear_bearing_pump_temperature": rear_bearing_pump_temperature,
+    }
 
 
 async def run_pump(pump_name: str, pump: Pump, period_seconds: float) -> None:
     pump.start_pump()
+    vibration_anomaly_counter = 0
+    temperature_anomaly_counter = 0
+    max_anomalies_before_stop = 5
 
-    while True:
+    while pump.state == "on":
         # Generate sensor values (normal or anomalous)
         values = generate_sensor_values(pump)
         pump.iteration(
@@ -46,47 +43,86 @@ async def run_pump(pump_name: str, pump: Pump, period_seconds: float) -> None:
             f"{pump_name}: state={pump.state}, "
             f"p_in={pump.petrol_pressure_input:.3f}, p_out={pump.petrol_pressure_output:.3f}, "
             f"t_front={pump.front_bearing_pump_temperature:.2f}, t_rear={pump.rear_bearing_pump_temperature:.2f}",
-            f"{'[ANOMALY]' if pump.anomaly_active else ''}"
+            f"vib_front_vert={pump.front_bearing_vertical_vibration:.3f}, vib_front_horiz={pump.front_bearing_horizontal_vibration:.3f}, "
+            f"vib_rear_vert={pump.rear_bearing_vertical_vibration:.3f}, vib_rear_horiz={pump.rear_bearing_horizontal_vibration:.3f}, vib_rear_axial={pump.rear_bearing_axial_vibration:.3f}"
         )
-        await asyncio.sleep(period_seconds)
 
+        vibration_vertical_anomaly = (
+            pump.rear_bearing_vertical_vibration > 1.14
+            or pump.front_bearing_vertical_vibration > 1.14
+        )
+        vibration_horizontal_anomaly = (
+            pump.rear_bearing_horizontal_vibration > 1.14
+            or pump.front_bearing_horizontal_vibration > 1.14
+        )
+        vibration_axial_anomaly = (
+            pump.rear_bearing_axial_vibration > 0.99
+        )
+        temperature_anomaly = (
+            values["front_bearing_pump_temperature"] > 49.8
+            or values["rear_bearing_pump_temperature"] > 49.8
+        )
 
-async def button_handler(pumps: dict) -> None:
-    """Listen for user input to trigger anomalies on pumps."""
-    print("\n--- Anomaly Controller ---")
-    print("Press: 1 = anomaly pump-1, 2 = anomaly pump-2, 3 = anomaly pump-3")
-    print("       a = clear all anomalies")
-    print("       q = quit\n")
-
-    loop = asyncio.get_event_loop()
-    
-    while True:
-        try:
-            # Run input in thread pool to avoid blocking
-            user_input = await loop.run_in_executor(None, input, "> ")
-            user_input = user_input.strip().lower()
-
-            if user_input == "1" and "pump-1" in pumps:
-                pumps["pump-1"].trigger_anomaly()
-                print("⚠️  Anomaly triggered on pump-1")
-            elif user_input == "2" and "pump-2" in pumps:
-                pumps["pump-2"].trigger_anomaly()
-                print("⚠️  Anomaly triggered on pump-2")
-            elif user_input == "3" and "pump-3" in pumps:
-                pumps["pump-3"].trigger_anomaly()
-                print("⚠️  Anomaly triggered on pump-3")
-            elif user_input == "a":
-                for pump in pumps.values():
-                    pump.clear_anomaly()
-                print("✓ All anomalies cleared")
-            elif user_input == "q":
-                print("Exiting...")
-                break
-        except EOFError:
+        if (pump.rear_bearing_vertical_vibration > 2
+            or pump.front_bearing_vertical_vibration > 2):
+            print(
+                f"{pump_name}: TOO HIGH VIBRATION anomaly detected "
+                f"Stopping the pump!"
+            )
+            pump.stop_pump()
             break
-        except Exception as e:
-            print(f"Error: {e}")
 
+        if (pump.rear_bearing_horizontal_vibration > 2
+            or pump.front_bearing_horizontal_vibration > 2):
+            print(
+                f"{pump_name}: TOO HIGH VIBRATION anomaly detected "
+                f"Stopping the pump!"
+            )
+            pump.stop_pump()
+            break
+
+        if (pump.rear_bearing_axial_vibration > 2):
+            print(
+                f"{pump_name}: TOO HIGH VIBRATION anomaly detected "
+                f"Stopping the pump!"
+            )
+            pump.stop_pump()
+            break
+
+        if vibration_vertical_anomaly or vibration_horizontal_anomaly or vibration_axial_anomaly:
+            vibration_anomaly_counter += 1
+            print(
+                f"{pump_name}: VIBRATION anomaly detected "
+                f"(count={vibration_anomaly_counter})"
+            )
+        elif vibration_anomaly_counter > 0:
+            vibration_anomaly_counter = 0
+
+        if temperature_anomaly:
+            temperature_anomaly_counter += 1
+            print(
+                f"{pump_name}: TEMPERATURE anomaly detected "
+                f"(count={temperature_anomaly_counter})"
+            )
+        elif temperature_anomaly_counter > 0:
+            temperature_anomaly_counter = 0
+
+        print(
+            f"{pump_name}: counters -> "
+            f"vibration={vibration_anomaly_counter}, "
+            f"temperature={temperature_anomaly_counter}"
+        )
+
+        if (
+            vibration_anomaly_counter >= max_anomalies_before_stop
+            or temperature_anomaly_counter >= max_anomalies_before_stop
+        ):
+            print(f"{pump_name}: Too many anomalies! Stopping the pump.")
+            pump.stop_pump()
+            break
+    
+            
+        await asyncio.sleep(period_seconds)
 
 async def main() -> None:
     pumps = {
@@ -120,16 +156,13 @@ async def main() -> None:
         for name, pump in pumps.items()
     ]
     
-    button_task = asyncio.create_task(button_handler(pumps))
-    
-    all_tasks = pump_tasks + [button_task]
+    all_tasks = pump_tasks
     
     try:
         await asyncio.gather(*all_tasks)
     except asyncio.CancelledError:
         pass
     finally:
-        # Stop all tasks
         for task in all_tasks:
             task.cancel()
 
