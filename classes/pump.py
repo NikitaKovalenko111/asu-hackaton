@@ -2,6 +2,7 @@ from utils.utils import FRONT_BEARING_VERTICAL_VIBRATION_COEFFICIENT, REAR_BEARI
 
 class Pump:
     state = "off"
+    kpd_value = 0.0
 
     def __init__(self, petrol_pressure_input, petrol_pressure_output, front_bearing_pump_temperature, rear_bearing_pump_temperature, rpm=STANDART_RPM):
         self.front_bearing_pump_temperature = front_bearing_pump_temperature
@@ -30,6 +31,17 @@ class Pump:
     
     def calculate_rpm_temperature_correlation(self, base_vibration, current_temperature, avg_temperature, correlation_coef, current_rpm, work_coef):
         return (base_vibration + (correlation_coef * (current_temperature - avg_temperature))) * (current_rpm / STANDART_RPM) * (1 + work_coef)
+    
+    def kpd(self, rpm, pressure_input, pressure_output):
+        flow = 400 * (rpm / 1480)
+        delta_p = pressure_output - pressure_input
+        p_hyd = delta_p * flow * 0.278
+        p_input = 75 * (rpm / 1480) ** 2.8
+
+        efficiency = (p_hyd / p_input) * 100 if p_input > 0 else 0
+        efficiency = max(30, min(efficiency, 85))
+
+        return round(efficiency, 1), round(p_input, 1), round(flow, 0)
 
     def iteration(self, petrol_pressure_input, petrol_pressure_output, front_bearing_pump_temperature, rear_bearing_pump_temperature):
         self.petrol_pressure_input = petrol_pressure_input
@@ -41,6 +53,7 @@ class Pump:
         self.rear_bearing_axial_vibration = self.calculate_rpm_temperature_correlation(0.6, self.rear_bearing_pump_temperature, REAR_BEARING_AVG_TEMPERATURE, 0, self.rpm, self.work_coef)
         self.front_bearing_vertical_vibration = self.calculate_rpm_temperature_correlation(0.56, self.front_bearing_pump_temperature, REAR_BEARING_AVG_TEMPERATURE, FRONT_BEARING_VERTICAL_VIBRATION_COEFFICIENT, self.rpm, self.work_coef)
         self.front_bearing_horizontal_vibration = self.calculate_rpm_temperature_correlation(0.44, self.front_bearing_pump_temperature, REAR_BEARING_AVG_TEMPERATURE, 0, self.rpm, self.work_coef)
+        self.kpd_value = self.kpd(self.rpm, self.petrol_pressure_input, self.petrol_pressure_output)[0]
         self.work_coef += 0.00001
 
 

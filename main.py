@@ -44,7 +44,8 @@ async def run_pump(pump_name: str, pump: Pump, period_seconds: float) -> None:
             f"p_in={pump.petrol_pressure_input:.3f}, p_out={pump.petrol_pressure_output:.3f}, "
             f"t_front={pump.front_bearing_pump_temperature:.2f}, t_rear={pump.rear_bearing_pump_temperature:.2f}",
             f"vib_front_vert={pump.front_bearing_vertical_vibration:.3f}, vib_front_horiz={pump.front_bearing_horizontal_vibration:.3f}, "
-            f"vib_rear_vert={pump.rear_bearing_vertical_vibration:.3f}, vib_rear_horiz={pump.rear_bearing_horizontal_vibration:.3f}, vib_rear_axial={pump.rear_bearing_axial_vibration:.3f}"
+            f"vib_rear_vert={pump.rear_bearing_vertical_vibration:.3f}, vib_rear_horiz={pump.rear_bearing_horizontal_vibration:.3f}, vib_rear_axial={pump.rear_bearing_axial_vibration:.3f}, "
+            f"kpd={pump.kpd_value:.1f}%",
         )
 
         vibration_vertical_anomaly = (
